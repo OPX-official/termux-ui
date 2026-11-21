@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+#  opx — OPX Termux UI command line
+#  opx help · opx banner "text" · opx set KEY VALUE · opx theme
+#  opx doctor · opx update · opx reload · opx uninstall
+# ═══════════════════════════════════════════════════════════════════
+set -uo pipefail
+
+OPX_HOME="${OPX_HOME:-$HOME/.opx/termux-ui}"
+CONFIG_FILE="${OPX_CONFIG:-$HOME/.config/opx/config}"
+REPO="OPX-official/termux-ui"
+[ -r "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+OPX_VERSION="$(cat "$OPX_HOME/VERSION" 2>/dev/null || printf '1.0.0')"
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  R=$'\033[0m'; B=$'\033[1m'; D=$'\033[2m'; C=$'\033[38;5;81m'
+  G=$'\033[38;5;114m'; Y=$'\033[38;5;221m'; E=$'\033[38;5;203m'
+else
+  R=; B=; D=; C=; G=; Y=; E=
+fi
+
+usage() {
+  cat <<EOF
+${B}${C}⚡ opx${R} ${D}— OPX Termux UI ${OPX_VERSION}${R}
+
+${B}usage${R}
+  opx banner [text]      show the banner, or change its title
+  opx sub [text]         change the banner subtitle
+  opx prompt [name]      change the prompt name (⚡ ${OPX_PROMPT_NAME:-opxTeam})
+  opx style 1|2|3        banner style: 1 figlet, 2 boxed, 3 off
+  opx set KEY VALUE      set any OPX_* setting
+  opx list               show the current configuration
+  opx theme              re-apply the OPX colour scheme
+  opx welcome            print the welcome banner
+  opx reload             reload Termux settings and the shell config
+  opx doctor             health check
+  opx update             fetch the latest version from GitHub
+  opx uninstall          remove everything (backups are kept)
+  opx version            print the version
+EOF
+}
+
+need_config() {
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  [ -f "$CONFIG_FILE" ] || : > "$CONFIG_FILE"
+}
+
+set_config() {
+  local key="$1"; shift
+  local val="$*"
+  case "$key" in OPX_*) ;; *) printf '%s invalid key: %s (must start with OPX_)\n' "$E" "$key" >&2; return 1 ;; esac
+  need_config
+  local line
+  line="$(printf '%s=%q' "$key" "$val")"
+  if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+    awk -v k="$key" -v l="$line" 'index($0, k "=") == 1 { print l; next } { print }' \
+      "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+  else
+    printf '%s\n' "$line" >> "$CONFIG_FILE"
+  fi
+  printf '%s✓%s %s=%s\n' "$G" "$R" "$key" "$val"
+}
+
+reload_all() {
+  command -v termux-reload-settings >/dev/null 2>&1 && termux-reload-settings >/dev/null 2>&1
+  printf '%s✓%s settings reloaded — open a new session or run %sexec zsh%s\n' "$G" "$R" "$B" "$R"
+}
+
+cmd="${1:-help}"; shift 2>/dev/null || true
+
+case "$cmd" in
+  help|-h|--help) usage ;;
+
+  version|-v|--version) printf 'OPX Termux UI %s (installed in %s)\n' "$OPX_VERSION" "$OPX_HOME" ;;
+
+  welcome|banner)
+    if [ "$#" -gt 0 ]; then
+      set_config OPX_BANNER_TEXT "$*"
+      printf '%s✓%s banner title updated\n' "$G" "$R"
+    fi
+    bash "$OPX_HOME/shell/opx.motd.sh"
+    ;;
+
+  sub)      set_config OPX_BANNER_SUB "$*" ;;
+  prompt)   set_config OPX_PROMPT_NAME "${1:-$OPX_PROMPT_NAME}" ;;
+  style)    set_config OPX_BANNER_STYLE "${1:-1}"; reload_all ;;
+  set)      [ "$#" -ge 2 ] || { printf 'usage: opx set KEY VALUE\n' >&2; exit 1; }
+            local_key="$1"; shift; set_config "$local_key" "$*" ;;
+
+  list)
+    printf '%sconfiguration%s  %s\n\n' "$B" "$R" "$CONFIG_FILE"
+    for k in OPX_INSTALLED_VERSION OPX_BANNER_TEXT OPX_BANNER_SUB OPX_BANNER_STYLE \
+             OPX_SHOW_INFO OPX_PROMPT_NAME OPX_PROMPT_ICON OPX_PROMPT_CHAR; do
+      printf '  %-22s %s\n' "$k" "${!k:-}"
+    done
+    ;;
+
+  theme)
+    mkdir -p "$HOME/.termux"
+    cp "$OPX_HOME/assets/colors.properties" "$HOME/.termux/colors.properties" &&
+      printf '%s✓%s colour scheme applied\n' "$G" "$R"
+    reload_all
+    ;;
+
+  reload) reload_all ;;
+
+  doctor)
+    printf '%sOPX doctor%s\n\n' "$B" "$R"
+    chk() { if eval "$2" >/dev/null 2>&1; then printf '  %s✓%s %s\n' "$G" "$R" "$1"; else printf '  %s✗%s %s\n' "$E" "$R" "$1"; fi; }
+    chk "Termux environment"            '[ -n "${TERMUX_VERSION:-}" ] || [ -d /data/data/com.termux/files/usr ]'
+    chk "opx home ($OPX_HOME)"          '[ -d "$OPX_HOME" ]'
+    chk "config file"                   '[ -r "$CONFIG_FILE" ]'
+    chk "zsh installed"                 'command -v zsh'
+    chk "zsh is the login shell"        '[ "$(basename "${SHELL:-none}")" = zsh ] || [ -L "$HOME/.termux/shell" ]'
+    chk "zshrc hook"                    'grep -q "OPX TERMUX UI" "$HOME/.zshrc"'
+    chk "banner (motd.sh)"              '[ -x "$HOME/.termux/motd.sh" ]'
+    chk "figlet (big banner)"           'command -v figlet'
+    chk "autosuggestions"               '[ -r "$OPX_HOME/vendor/zsh-autosuggestions/zsh-autosuggestions.zsh" ]'
+    chk "syntax highlighting"           '[ -r "$OPX_HOME/vendor/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]'
+    chk "colour scheme"                 '[ -r "$HOME/.termux/colors.properties" ]'
+    chk "extra keys"                    'grep -q "extra-keys" "$HOME/.termux/termux.properties"'
+    chk "fzf (Ctrl-R history)"          'command -v fzf'
+    printf '\n'
+    ;;
+
+  update)
+    command -v curl >/dev/null 2>&1 || { printf '%s!%s curl is required\n' "$Y" "$R" >&2; exit 1; }
+    tmp="$(mktemp "${TMPDIR:-/tmp}/opx-update.XXXXXX")" || exit 1
+    if curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/install.sh" -o "$tmp"; then
+      OPX_NONINTERACTIVE=1 bash "$tmp"
+      rm -f "$tmp"
+    else
+      rm -f "$tmp"
+      printf '%s✗%s update failed (network?)\n' "$E" "$R" >&2
+      exit 1
+    fi
+    ;;
+
+  uninstall)
+    exec bash "$OPX_HOME/uninstall.sh"
+    ;;
+
+  *) printf 'unknown command: %s\n\n' "$cmd" >&2; usage; exit 1 ;;
+esac
