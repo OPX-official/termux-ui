@@ -45,10 +45,9 @@ center_text() { # <text> -> leading spaces
   printf '%*s' "$pad" ''
 }
 
-info_line() {
-  local out="" t model bat
-  t="$(date +'%H:%M')"
-  out="${t}"
+info_text() {
+  local out model bat
+  out="$(date +'%H:%M')"
   if command -v getprop >/dev/null 2>&1; then
     model="$(getprop ro.product.model 2>/dev/null)"
     [ -n "$model" ] && out="${out}  ·  ${model}"
@@ -57,8 +56,16 @@ info_line() {
     bat="$(termux-battery-status 2>/dev/null | jq -r '.percentage // empty' 2>/dev/null)"
     [ -n "$bat" ] && out="${out}  ·  ${bat}%"
   fi
-  out="${out}  ·  OPX Termux UI ${OPX_INSTALLED_VERSION}"
-  printf '%s%s%s\n' "$MUTE" "$out" "$R"
+  printf '%s  ·  OPX Termux UI %s' "$out" "$OPX_INSTALLED_VERSION"
+}
+
+info_line() { printf '%s%s%s' "$MUTE" "$(info_text)" "$R"; }
+
+# pad <text> -> spaces that centre <text> in the terminal
+pad() {
+  local p=$(( (W - ${#1}) / 2 ))
+  (( p < 0 )) && p=0
+  printf '%*s' "$p" ''
 }
 
 case "$OPX_BANNER_STYLE" in
@@ -77,8 +84,11 @@ case "$OPX_BANNER_STYLE" in
       printf '\n'
     fi
     [ -n "$OPX_BANNER_SUB" ] && printf '%s%s%s%s\n' \
-      "$(center_text "$OPX_BANNER_SUB")" "$DIM" "$OPX_BANNER_SUB" "$R"
-    [ "$OPX_SHOW_INFO" = "1" ] && printf '  %s\n' "$(info_line)"
+      "$(pad "$OPX_BANNER_SUB")" "$DIM" "$OPX_BANNER_SUB" "$R"
+    if [ "$OPX_SHOW_INFO" = "1" ]; then
+      info_plain="$(info_text)"
+      printf '%s%s%s%s\n' "$(pad "$info_plain")" "$MUTE" "$info_plain" "$R"
+    fi
     printf '\n'
     ;;
   2)
