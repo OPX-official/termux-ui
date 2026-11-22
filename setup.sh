@@ -81,6 +81,22 @@ ask_yn() {
   case "$ans" in [Yy]*) REPLY=y ;; *) REPLY=n ;; esac
 }
 
+# Termux has no /usr/bin, so "#!/usr/bin/env bash" makes a script that is
+# executed directly (motd.sh, the opx command) fail with "not found".
+# Rewrite the shebang of an installed copy to the real bash path.
+fix_shebang() {
+  local f="$1" b
+  [ -f "$f" ] || return 0
+  b="${PREFIX_DIR}/bin/bash"
+  [ -x "$b" ] || b="$(command -v bash 2>/dev/null)"
+  [ -x "$b" ] || return 0
+  if [ "$(head -n 1 "$f" 2>/dev/null)" != "#!${b}" ]; then
+    sed "1s|^#!.*|#!${b}|" "$f" > "$f.opx-tmp" 2>/dev/null && mv "$f.opx-tmp" "$f"
+    chmod +x "$f" 2>/dev/null
+  fi
+  return 0
+}
+
 backup_file() {
   local f="$1"
   [ -e "$f" ] || return 0
@@ -179,6 +195,11 @@ install_payload() {
   fi
   chmod +x "$OPX_HOME/setup.sh" "$OPX_HOME/install.sh" "$OPX_HOME/uninstall.sh" \
            "$OPX_HOME/bin/opx" "$OPX_HOME/shell/opx.motd.sh" 2>/dev/null
+  local f
+  for f in "$OPX_HOME/setup.sh" "$OPX_HOME/install.sh" "$OPX_HOME/uninstall.sh" \
+           "$OPX_HOME/bin/opx" "$OPX_HOME/shell/opx.motd.sh"; do
+    fix_shebang "$f"
+  done
   ok "payload → ${OPX_HOME/#$HOME/~}"
 }
 
@@ -280,6 +301,7 @@ install_motd() {
   fi
   cp "$OPX_HOME/shell/opx.motd.sh" "$HOME/.termux/motd.sh" 2>/dev/null
   chmod +x "$HOME/.termux/motd.sh" 2>/dev/null
+  fix_shebang "$HOME/.termux/motd.sh"
   rm -f "$HOME/.hushlogin"
   ok "~/.termux/motd.sh installed"
 }
@@ -311,6 +333,7 @@ install_cli() {
   mkdir -p "$BIN_DIR"
   cp "$OPX_HOME/bin/opx" "$BIN_DIR/opx" 2>/dev/null
   chmod +x "$BIN_DIR/opx" 2>/dev/null
+  fix_shebang "$BIN_DIR/opx"
   if command -v opx >/dev/null 2>&1 || [ -x "$BIN_DIR/opx" ]; then
     ok "opx → ${BIN_DIR/#$HOME/~}/opx"
   else

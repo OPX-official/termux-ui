@@ -125,6 +125,18 @@ This removes the shell hook, banner, theme, files and the `opx` command, and
 restores your previous `~/.termux` files from the latest backup.
 A copy of your `~/.zshrc` is left at `~/.zshrc.opx-removed.bak`.
 
+## Troubleshooting
+
+```bash
+opx doctor      # what is installed and what is not
+opx welcome     # render the banner right now
+```
+
+`.../motd.sh: not found` or `opx: not found` — old versions shipped
+`#!/usr/bin/env bash`, and Termux has no `/usr/bin`. Since 1.1.1 every
+installed script gets its shebang rewritten to `$PREFIX/bin/bash`. Re-run the
+install one-liner once and the message is gone for good.
+
 ## Layout
 
 ```

@@ -116,6 +116,7 @@ case "$cmd" in
     chk "zsh is the login shell"        '[ "$(basename "${SHELL:-none}")" = zsh ] || [ -L "$HOME/.termux/shell" ]'
     chk "zshrc hook"                    'grep -q "OPX TERMUX UI" "$HOME/.zshrc"'
     chk "banner (motd.sh)"              '[ -x "$HOME/.termux/motd.sh" ]'
+    chk "Termux-safe shebangs"          '! head -n 1 "$HOME/.termux/motd.sh" 2>/dev/null | grep -q "^#!/usr/bin/env"'
     chk "figlet (big banner)"           'command -v figlet'
     chk "autosuggestions"               '[ -r "$OPX_HOME/vendor/zsh-autosuggestions/zsh-autosuggestions.zsh" ]'
     chk "syntax highlighting"           '[ -r "$OPX_HOME/vendor/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]'
