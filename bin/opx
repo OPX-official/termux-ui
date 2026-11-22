@@ -28,6 +28,7 @@ ${B}usage${R}
   opx sub [text]         change the banner subtitle
   opx prompt [name]      change the prompt name (⚡ ${OPX_PROMPT_NAME:-opxTeam})
   opx style 1|2|3        banner style: 1 figlet, 2 boxed, 3 off
+  opx layout auto|two|one  prompt layout (auto fits any screen)
   opx set KEY VALUE      set any OPX_* setting
   opx list               show the current configuration
   opx theme              re-apply the OPX colour scheme
@@ -84,13 +85,14 @@ case "$cmd" in
   sub)      set_config OPX_BANNER_SUB "$*" ;;
   prompt)   set_config OPX_PROMPT_NAME "${1:-$OPX_PROMPT_NAME}" ;;
   style)    set_config OPX_BANNER_STYLE "${1:-1}"; reload_all ;;
+  layout)   case "${1:-auto}" in auto|two|one) set_config OPX_PROMPT_MODE "$1" ;; *) printf '%s!%s layout must be auto, two or one\n' "$Y" "$R" >&2; exit 1 ;; esac ;;
   set)      [ "$#" -ge 2 ] || { printf 'usage: opx set KEY VALUE\n' >&2; exit 1; }
             local_key="$1"; shift; set_config "$local_key" "$*" ;;
 
   list)
     printf '%sconfiguration%s  %s\n\n' "$B" "$R" "$CONFIG_FILE"
     for k in OPX_INSTALLED_VERSION OPX_BANNER_TEXT OPX_BANNER_SUB OPX_BANNER_STYLE \
-             OPX_SHOW_INFO OPX_PROMPT_NAME OPX_PROMPT_ICON OPX_PROMPT_CHAR; do
+             OPX_SHOW_INFO OPX_PROMPT_NAME OPX_PROMPT_ICON OPX_PROMPT_CHAR OPX_PROMPT_MODE; do
       printf '  %-22s %s\n' "$k" "${!k:-}"
     done
     ;;

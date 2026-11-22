@@ -36,18 +36,44 @@ Flags: `--yes`, `--no-tools`, `--no-banner`, `--no-shell`.
 | Step | Result |
 | --- | --- |
 | Banner | `~/.termux/motd.sh` with a gradient title (figlet or boxed), subtitle and info line |
+| Auto-fit | banner and prompt measure the real terminal size — resize, split screen or rotate and nothing wraps |
 | Prompt | two-line prompt `┌──(⚡opxTeam)─[~]` / `└─#`, git branch on the right, command timer |
 | Autosuggestions | previous commands appear as ghost text while you type |
 | Highlighting | commands, paths and errors coloured as you type |
 | History | 50 000 entries, shared between sessions, duplicate-free |
 | `Ctrl-R` | fuzzy history search via fzf |
 | Theme | Tokyo Night colours in `~/.termux/colors.properties` |
-| Keys | two-row extra keys with arrows, Home/End, PgUp/PgDn |
+| Keys | two-row extra keys with arrows, Home/End, PgUp/PgDn — thumb-sized, no keyboard hunting |
 | Tools | `eza`, `bat`, `fzf`, `jq`, `tree`, `htop`, `figlet` (optional) |
 
 Everything already on your device is backed up first to
 `~/.opx/termux-ui/backups/<timestamp>/`, and the newest path is stored in
 `~/.opx/termux-ui/backups/LAST`.
+
+## Auto-fit anywhere
+
+The banner and prompt measure the terminal every time they draw, in real
+display cells (wide and emoji glyphs count as two), so they stay sharp on any
+screen:
+
+| Terminal | What you get |
+| --- | --- |
+| wide (tablet, desktop, `tmux`) | figlet title centred, full path, git branch on the right |
+| normal phone (≈40–60 cols) | figlet or boxed banner, two-line prompt, branch when it fits |
+| narrow / split screen (< 34 cols) | compact one-line banner, one-line prompt `⚡opxTeam ~ #` |
+| short screen (landscape keyboard open) | banner drops the info line, everything still fits one screen |
+
+Long banner text, subtitles and deep paths are shortened with `…` instead of
+wrapping. The prompt rebuilds itself the moment the window changes size
+(`TRAPWINCH`), so rotating the phone needs no new session.
+
+Force a style if you prefer one:
+
+```bash
+opx layout auto    # default: pick by screen width
+opx layout two     # always the two-line prompt
+opx layout one     # always the compact one-line prompt
+```
 
 ## The `opx` command
 
@@ -56,6 +82,7 @@ opx banner "MY NAME"   # change the big banner text
 opx sub "my subtitle"  # change the subtitle
 opx prompt opxTeam     # change the prompt name
 opx style 1|2|3        # figlet · boxed · off
+opx layout auto|two|one  # prompt layout
 opx set KEY VALUE      # set any OPX_* setting
 opx list               # show current settings
 opx theme              # re-apply the colour scheme
@@ -76,6 +103,7 @@ OPX_SHOW_INFO=1
 OPX_PROMPT_NAME="opxTeam"
 OPX_PROMPT_ICON="⚡"
 OPX_PROMPT_CHAR="#"
+OPX_PROMPT_MODE="auto"    # auto | two | one
 ```
 
 ## Requirements

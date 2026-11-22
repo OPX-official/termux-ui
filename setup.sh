@@ -10,7 +10,7 @@ set -uo pipefail
 
 SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 OPX_HOME="${OPX_HOME:-$HOME/.opx/termux-ui}"
-OPX_VERSION="$(cat "$SELF_DIR/VERSION" 2>/dev/null || printf '1.0.0')"
+OPX_VERSION="$(cat "$SELF_DIR/VERSION" 2>/dev/null || printf '1.1.0')"
 CONFIG_DIR="$HOME/.config/opx"
 CONFIG_FILE="$CONFIG_DIR/config"
 BACKUP_ROOT="$OPX_HOME/backups"
@@ -117,6 +117,7 @@ OPX_SHOW_INFO="1"
 OPX_PROMPT_NAME="opxTeam"
 OPX_PROMPT_ICON="⚡"
 OPX_PROMPT_CHAR="#"
+OPX_PROMPT_MODE="auto"
 OPX_GIT_NAME=""
 OPX_GIT_EMAIL=""
 OPX_INSTALLED_VERSION=""
@@ -146,6 +147,8 @@ wizard() {
   ask "Prompt name (shown as ⚡ name)" "$OPX_PROMPT_NAME"; OPX_PROMPT_NAME="$REPLY"
   ask "Prompt icon" "$OPX_PROMPT_ICON"; OPX_PROMPT_ICON="$REPLY"
   ask "Prompt character" "$OPX_PROMPT_CHAR"; OPX_PROMPT_CHAR="$REPLY"
+  ask "Prompt layout — auto · two · one (auto = fits the screen)" "$OPX_PROMPT_MODE"
+  case "$REPLY" in auto|two|one) OPX_PROMPT_MODE="$REPLY" ;; *) OPX_PROMPT_MODE=auto ;; esac
 
   ask_yn "Install optional power tools (eza bat fzf jq tree htop)?" "y"
   [ "$REPLY" = "y" ] || DO_TOOLS=0
@@ -236,9 +239,10 @@ write_config() {
     printf 'OPX_BANNER_SUB=%q\n'        "$OPX_BANNER_SUB"
     printf 'OPX_BANNER_STYLE=%q\n'      "$OPX_BANNER_STYLE"
     printf 'OPX_SHOW_INFO=%q\n'         "$OPX_SHOW_INFO"
-    printf 'OPX_PROMPT_NAME=%q\n'       "$OPX_PROMPT_NAME"
-    printf 'OPX_PROMPT_ICON=%q\n'       "$OPX_PROMPT_ICON"
-    printf 'OPX_PROMPT_CHAR=%q\n'       "$OPX_PROMPT_CHAR"
+        printf 'OPX_PROMPT_NAME=%q\n'      "$OPX_PROMPT_NAME"
+    printf 'OPX_PROMPT_ICON=%q\n'      "$OPX_PROMPT_ICON"
+    printf 'OPX_PROMPT_CHAR=%q\n'      "$OPX_PROMPT_CHAR"
+    printf 'OPX_PROMPT_MODE=%q\n'      "$OPX_PROMPT_MODE"
   } > "$CONFIG_FILE"
   umask "$old_umask"
   ok "config → ${CONFIG_FILE/#$HOME/~}"
@@ -317,7 +321,7 @@ install_cli() {
 set_shell() {
   ui_head "Default shell"
   if [ "$DO_SHELL" = 0 ] || [ "$TERMUX" != 1 ]; then
-    warn "default shell unchanged — run 'exec zsh' to enter the new shell"
+    warn "default shell unchanged — run 'exec zsh'"
     return 0
   fi
   if [ -x "$PREFIX_DIR/bin/zsh" ]; then
@@ -345,23 +349,73 @@ apply_git_identity() {
 # ═══════════════════════════════════════════════════════════════════
 #  summary
 # ═══════════════════════════════════════════════════════════════════
+# display width: emoji and CJK count as two cells
+fit_w() { # <text> <maxcols> → REPLY (truncated with …)
+  local s="$1" max="${2:-0}" i ch w=0 out="" cw
+  local n=${#s}
+  REPLY=""
+  (( max <= 0 )) && return 0
+  for ((i = 0; i < n; i++)); do
+    ch="${s:i:1}"
+    cw=1
+    [[ "$ch" == [[:ascii:]] ]] || cw=2
+    w=$(( w + cw ))
+  done
+  if (( w <= max )); then REPLY="$s"; return 0; fi
+  w=0; out=""
+  for ((i = 0; i < n; i++)); do
+    ch="${s:i:1}"
+    cw=1
+    [[ "$ch" == [[:ascii:]] ]] || cw=2
+    (( w + cw > max - 1 )) && break
+    out+="$ch"; w=$(( w + cw ))
+  done
+  REPLY="${out}…"
+}
+
+disp_w() { # <text> → REPLY width in cells
+  local s="$1" i w=0
+  local n=${#s}
+  for ((i = 0; i < n; i++)); do
+    [[ "${s:i:1}" == [[:ascii:]] ]] && w=$(( w + 1 )) || w=$(( w + 2 ))
+  done
+  REPLY=$w
+}
+
 summary() {
   mkdir -p "$BACKUP_ROOT"
   printf '%s' "$BACKUP_DIR" > "$BACKUP_ROOT/LAST" 2>/dev/null
-  local w=45 head="⚡ OPX Termux UI  v$OPX_VERSION"
+
+  # the closing box auto-fits narrow phone screens
+  local cols w head pad v
+  cols="${COLUMNS:-80}"
+  case "$cols" in ''|*[!0-9]*) cols=80 ;; esac
+  w=$(( cols - 6 ))
+  (( w > 56 )) && w=56
+  (( w < 26 )) && w=26
+  head="⚡ OPX Termux UI  v$OPX_VERSION"
+  fit_w "$head" $(( w - 2 )); head="$REPLY"
+  disp_w "$head"
+  pad=$(( w - 1 - REPLY ))
+  (( pad < 0 )) && pad=0
+
   printf '\n'
   printf '  %s┌%s┐%s\n' "$CY" "$(printf '─%.0s' $(seq 1 "$w"))" "$R"
-  printf '  %s│%s  %s%-*s%s%s│%s\n' "$CY" "$R" "$B" "$((w - 3))" "$head" "$R" "$CY" "$R"
+  printf '  %s│%s %s%s%s%*s%s│%s\n' "$CY" "$R" "$B" "$head" "$R" "$pad" '' "$CY" "$R"
   printf '  %s└%s┘%s\n\n' "$CY" "$(printf '─%.0s' $(seq 1 "$w"))" "$R"
 
-  printf '  %sBanner%s   %s\n' "$DIM" "$R" "$OPX_BANNER_TEXT — $( [ "$OPX_BANNER_STYLE" = 3 ] && echo off || echo "style $OPX_BANNER_STYLE" )"
-  printf '  %sPrompt%s   %s┌──(%s%s%s)─[~]  %s\n' "$DIM" "$R" "$CY" "$YL" "$OPX_PROMPT_ICON$OPX_PROMPT_NAME" "$CY" "$R"
-  printf '           %s└─%s%s%s %s\n\n' "$CY" "$GN" "$OPX_PROMPT_CHAR" "$R" ""
-  printf '  %snext%s  exec zsh        %s(or just reopen Termux)%s\n' "$DIM" "$R" "$DIM" "$R"
-  printf '  %shelp%s  opx --help      %s(banner · theme · update · doctor · uninstall)%s\n' \
-    "$DIM" "$R" "$DIM" "$R"
-  printf '  %sundo%s  opx uninstall   %s(backups in %s)%s\n\n' \
-    "$DIM" "$R" "$DIM" "${BACKUP_ROOT/#$HOME/~}" "$R"
+  fit_w "$OPX_BANNER_TEXT — $( [ "$OPX_BANNER_STYLE" = 3 ] && echo off || echo "style $OPX_BANNER_STYLE" )" $(( cols - 13 ))
+  printf '  %sBanner%s    %s\n' "$DIM" "$R" "$REPLY"
+  fit_w "┌──(${OPX_PROMPT_ICON}${OPX_PROMPT_NAME})─[~]" $(( cols - 13 ))
+  printf '  %sPrompt%s    %s%s%s\n' "$DIM" "$R" "$CY" "$REPLY" "$R"
+  printf '            %s└─%s%s%s %s\n\n' "$CY" "$GN" "$OPX_PROMPT_CHAR" "$R" ""
+
+  fit_w "exec zsh  · or just reopen Termux" $(( cols - 10 ))
+  printf '  %snext%s  %s\n' "$DIM" "$R" "$REPLY"
+  fit_w "opx --help  · banner, theme, update, doctor, uninstall" $(( cols - 10 ))
+  printf '  %shelp%s  %s\n' "$DIM" "$R" "$REPLY"
+  fit_w "opx uninstall  · backups in ${BACKUP_ROOT/#$HOME/~}" $(( cols - 10 ))
+  printf '  %sundo%s  %s\n\n' "$DIM" "$R" "$REPLY"
 }
 
 # ═══════════════════════════════════════════════════════════════════
